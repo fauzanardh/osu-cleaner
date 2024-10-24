@@ -1,4 +1,4 @@
-export const scanner = {
+export const file_processor = {
     STATUS: "scanner_status",
 
     SCAN_COUNTS: "scanner_scan_counts",
@@ -14,5 +14,10 @@ export const deletion = {
 export const statusValues = {
     SCAN_START: "scan_start",
     PARSE_START: "parse_start",
-    FILTER_START: "filter_start"
+    FILTER_START: "filter_start",
+
+    SCAN_CANCELLED: "scan_cancelled",
+    PARSE_CANCELLED: "parse_cancelled",
+    FILTER_CANCELLED: "filter_cancelled",
+    DELETION_CANCELLED: "deletion_cancelled",
 };

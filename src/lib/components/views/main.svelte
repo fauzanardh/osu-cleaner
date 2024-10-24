@@ -11,7 +11,7 @@
 	import Analyzer from '$lib/components/ui/analysis/analyzer.svelte';
 	import Summary from '$lib/components/ui/analysis/summary.svelte';
 
-	import { scanner, statusValues } from '$lib/consts';
+	import { file_processor, statusValues } from '$lib/consts';
 	import { FileProcessorService } from '$lib/services/file_processor';
 	import type {
 		AlertMessage,
@@ -25,51 +25,6 @@
 		selectedDirectory: string;
 		onCategoryExpandClick: (category: string) => void;
 	}>();
-
-	const fileProcessor = new FileProcessorService();
-	let unsubscriber: Promise<UnlistenFn>[] = [];
-
-	const scannerStatusHandler = (event: Event<string>) => {
-		switch (event.payload) {
-			case statusValues.SCAN_START:
-				analyzerContext.setStatus('scanning');
-				analyzerContext.updateUI('Scanning osu! Directory...', 'Found 0 files');
-				break;
-			case statusValues.PARSE_START:
-				analyzerContext.setStatus('parsing');
-				analyzerContext.updateUI('Parsing Files...', 'Parsed 0 files');
-				break;
-			case statusValues.FILTER_START:
-				analyzerContext.setStatus('filtering');
-				analyzerContext.updateUI('Filtering Files...', '');
-				break;
-		}
-	};
-
-	const scannerScanCountsHandler = (event: Event<number>) => {
-		analyzerContext.updateScanCount(event.payload);
-	};
-
-	const scannerParseCountsHandler = (event: Event<number>) => {
-		analyzerContext.updateParseCount(event.payload);
-	};
-
-	const scannerFilterCountsHandler = (event: Event<CounterUpdate>) => {
-		analyzerContext.updateFilterCounts(event.payload);
-	};
-
-	$effect(() => {
-		unsubscriber = [
-			listen<string>(scanner.STATUS, scannerStatusHandler),
-			listen<number>(scanner.SCAN_COUNTS, scannerScanCountsHandler),
-			listen<number>(scanner.PARSE_COUNTS, scannerParseCountsHandler),
-			listen<CounterUpdate>(scanner.FILTER_COUNTS, scannerFilterCountsHandler)
-		];
-
-		return () => {
-			unsubscriber.forEach((unsub) => unsub.then((fn) => fn()));
-		};
-	});
 
 	const analyzerContext = getContext<{
 		analyzer: AnalyzerState;
@@ -96,6 +51,72 @@
 		toggleCategorySelected: (category: string) => void;
 	}>('category');
 
+	const fileProcessor = new FileProcessorService();
+	let unsubscriber: Promise<UnlistenFn>[] = [];
+
+	const scannerStatusHandler = (event: Event<string>) => {
+		switch (event.payload) {
+			case statusValues.SCAN_START:
+				analyzerContext.setStatus('scanning');
+				analyzerContext.updateUI('Scanning osu! Directory...', 'Found 0 files');
+				break;
+			case statusValues.PARSE_START:
+				analyzerContext.setStatus('parsing');
+				analyzerContext.updateUI('Parsing Files...', 'Parsed 0 files');
+				break;
+			case statusValues.FILTER_START:
+				analyzerContext.setStatus('filtering');
+				analyzerContext.updateUI('Filtering Files...', '');
+				break;
+			case statusValues.SCAN_CANCELLED ||
+				statusValues.PARSE_CANCELLED ||
+				statusValues.FILTER_CANCELLED:
+				console.log('Cancelled');
+				alertContext.show({
+					type: 'warning',
+					title: 'Cancelled',
+					message: 'Analysis was cancelled'
+				});
+				break;
+			case statusValues.DELETION_CANCELLED:
+				alertContext.show({
+					type: 'warning',
+					title: 'Cancelled',
+					message: 'Deletion was cancelled'
+				});
+				break;
+		}
+	};
+
+	$effect(() => {
+		console.log(analyzerContext.analyzer.status);
+	});
+
+	const scannerScanCountsHandler = (event: Event<number>) => {
+		analyzerContext.updateScanCount(event.payload);
+	};
+
+	const scannerParseCountsHandler = (event: Event<number>) => {
+		analyzerContext.updateParseCount(event.payload);
+	};
+
+	const scannerFilterCountsHandler = (event: Event<CounterUpdate>) => {
+		analyzerContext.updateFilterCounts(event.payload);
+	};
+
+	$effect(() => {
+		unsubscriber = [
+			listen<string>(file_processor.STATUS, scannerStatusHandler),
+			listen<number>(file_processor.SCAN_COUNTS, scannerScanCountsHandler),
+			listen<number>(file_processor.PARSE_COUNTS, scannerParseCountsHandler),
+			listen<CounterUpdate>(file_processor.FILTER_COUNTS, scannerFilterCountsHandler)
+		];
+
+		return () => {
+			unsubscriber.forEach((unsub) => unsub.then((fn) => fn()));
+		};
+	});
+
 	const openFolderDialog = async () => {
 		try {
 			const selected = await open({
@@ -115,6 +136,21 @@
 		}
 	};
 
+	const cancelOperation = async () => {
+		try {
+			console.log('Cancelling operation...');
+			analyzerContext.setStatus('cancelling');
+			analyzerContext.updateUI('Cancelling...', '');
+			await fileProcessor.cancelOperation();
+		} catch (err) {
+			alertContext.show({
+				type: 'error',
+				title: 'Error',
+				message: 'Failed to cancel operation'
+			});
+		}
+	};
+
 	const startAnalysis = async () => {
 		if (!selectedDirectory) {
 			alertContext.show({
@@ -130,6 +166,11 @@
 			await fileProcessor.scanDirectory(selectedDirectory);
 			console.log('Completed scanning directory');
 			let categorySummary = await fileProcessor.getCategorySummary();
+			if (analyzerContext.analyzer.status === 'cancelling') {
+				analyzerContext.setStatus('idle');
+				analyzerContext.reset();
+				return;
+			}
 			categoryContext.updateCategory(categorySummary);
 			analyzerContext.setSummary(categorySummary);
 			analyzerContext.setStatus('complete');
@@ -176,11 +217,14 @@
 					disabled={true}
 					value={selectedDirectory}
 				/>
-				<Button
-					on:click={openFolderDialog}
-					disabled={analyzerContext.analyzer.status !== 'idle' &&
-						analyzerContext.analyzer.status !== 'complete'}>Browse</Button
-				>
+				{#if analyzerContext.analyzer.status === 'idle' || analyzerContext.analyzer.status === 'complete'}
+					<Button on:click={openFolderDialog}>Browse</Button>
+				{:else if analyzerContext.analyzer.status === 'scanning' || analyzerContext.analyzer.status === 'parsing' || analyzerContext.analyzer.status === 'filtering' || analyzerContext.analyzer.status === 'cancelling'}
+					<Button
+						on:click={cancelOperation}
+						disabled={analyzerContext.analyzer.status === 'cancelling'}>Cancel</Button
+					>
+				{/if}
 			</div>
 		</Card.Content>
 	</Card.Root>
@@ -193,7 +237,7 @@
 			<Search class="h-5 w-5" />
 			Analyze osu! Directory
 		</Button>
-	{:else if analyzerContext.analyzer.status === 'scanning' || analyzerContext.analyzer.status === 'parsing' || analyzerContext.analyzer.status === 'filtering'}
+	{:else if analyzerContext.analyzer.status === 'scanning' || analyzerContext.analyzer.status === 'parsing' || analyzerContext.analyzer.status === 'filtering' || analyzerContext.analyzer.status === 'cancelling'}
 		<Analyzer
 			title={analyzerContext.analyzer.ui.analyzer.title}
 			subtitle={analyzerContext.analyzer.ui.analyzer.subtitle}

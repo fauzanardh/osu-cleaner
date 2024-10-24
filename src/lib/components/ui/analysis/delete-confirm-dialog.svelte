@@ -2,6 +2,7 @@
 	import { cn } from '$lib/utils';
 	import { listen, type Event, type UnlistenFn } from '@tauri-apps/api/event';
 	import { AlertCircle, CheckCircle2, Loader2, XCircle } from 'lucide-svelte';
+	import { getContext } from 'svelte';
 	import { quintOut } from 'svelte/easing';
 	import { fly } from 'svelte/transition';
 
@@ -10,7 +11,8 @@
 
 	import { deletion } from '$lib/consts';
 	import { humanizeFileSize } from '$lib/utils/humanize';
-	import type { CategoryUI } from '$lib/utils/interfaces';
+	import type { AlertMessage, CategoryUI } from '$lib/utils/interfaces';
+	import { FileProcessorService } from '$lib/services/file_processor';
 
 	let {
 		show = $bindable(false),
@@ -27,6 +29,15 @@
 		onComplete: () => void;
 		isDeleting: boolean;
 	}>();
+
+	const alertContext = getContext<{
+		alerts: AlertMessage[];
+		dismiss: (id: string) => void;
+		show: (alert: Omit<AlertMessage, 'id'>) => void;
+		clear: () => void;
+	}>('alerts');
+
+	const fileProcessor = new FileProcessorService();
 
 	let error: string | null = $state<string | null>(null);
 	let currentCategory = $state<CategoryUI | null>(null);
@@ -75,6 +86,18 @@
 			error = err instanceof Error ? err.message : 'Failed to delete files';
 			isDeleting = false;
 		}
+	};
+
+	const cancelDelete = async () => {
+		if (isDeleting) {
+			await fileProcessor.cancelOperation();
+			alertContext.show({
+				type: 'warning',
+				title: 'Deletion Cancelled',
+				message: 'Deletion operation was cancelled'
+			});
+		}
+		show = false;
 	};
 
 	$effect(() => {
@@ -178,7 +201,7 @@
 				</AlertDialog.Header>
 				<AlertDialog.Footer class="gap-2">
 					<AlertDialog.Cancel asChild>
-						<Button disabled={isDeleting} on:click={() => (show = false)}>Cancel</Button>
+						<Button on:click={cancelDelete}>Cancel</Button>
 					</AlertDialog.Cancel>
 					<AlertDialog.Action asChild>
 						<Button variant="destructive" disabled={isDeleting} on:click={handleDelete}>

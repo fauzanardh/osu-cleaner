@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use tauri::{Builder, Manager};
 
 mod core;
@@ -19,12 +19,13 @@ fn main() {
                         .build(),
                 )?;
             }
-            app.manage(FileProcessorState(Mutex::new(FileProcessorService::new(
+            app.manage(FileProcessorState(RwLock::new(FileProcessorService::new(
                 Arc::new(app.handle().clone()),
             ))));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            service::file_processor_service::cancel_operation,
             service::file_processor_service::scan_directory,
             service::file_processor_service::get_category_summary,
             service::file_processor_service::get_category_data,
