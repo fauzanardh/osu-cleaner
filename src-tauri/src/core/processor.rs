@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use ahash::AHashMap;
@@ -26,13 +26,13 @@ pub struct FileProcessor {
     scan_counters: Arc<CommonCounterState>,
     parse_counters: Arc<CommonCounterState>,
     filter_counters: Arc<FilterCounterState>,
-    scan_result: Arc<Mutex<Option<ScanResult>>>,
+    scan_result: Arc<RwLock<Option<ScanResult>>>,
 }
 
 impl FileProcessor {
     pub fn new() -> Self {
         Self {
-            scan_result: Arc::new(Mutex::new(None)),
+            scan_result: Arc::new(RwLock::new(None)),
             last_emit: Arc::new(AtomicU64::new(0)),
             emit_interval: 1_000_000 / 20, // 20 times per second
             scan_counters: Arc::new(CommonCounterState::new()),
@@ -194,6 +194,7 @@ impl FileProcessor {
             .unwrap();
         let entries: Vec<_> = WalkDir::new(path)
             .into_iter()
+            .par_bridge()
             .filter_map(|e| {
                 if let Ok(e) = e {
                     if e.file_type().is_file() {
@@ -287,7 +288,7 @@ impl FileProcessor {
             });
         self.try_emit_filter_counts(&app, true); // Flush remaining counts
 
-        *self.scan_result.lock().unwrap() = Some(scan_result);
+        *self.scan_result.write().unwrap() = Some(scan_result);
         Ok(())
     }
 
@@ -323,7 +324,7 @@ impl FileProcessor {
 
     pub fn get_category_summary(&self) -> Option<CategorySummaryResponse> {
         let binding = self.get_scan_result();
-        let scan_result = binding.lock().unwrap();
+        let scan_result = binding.read().unwrap();
         let scan_result = match &*scan_result {
             Some(scan_result) => scan_result,
             None => return None,
@@ -364,7 +365,7 @@ impl FileProcessor {
 
     pub fn get_category_data(&self, category: &str) -> Option<CategoryDataResponse> {
         let binding = self.get_scan_result();
-        let scan_result = binding.lock().unwrap();
+        let scan_result = binding.read().unwrap();
         let scan_result = match &*scan_result {
             Some(scan_result) => scan_result,
             None => return None,
@@ -386,7 +387,8 @@ impl FileProcessor {
 
     pub fn delete_files(&self, app: Arc<AppHandle>, categories: Vec<&str>) -> Result<()> {
         let scan_result = self.get_scan_result();
-        let mut scan_result = scan_result.lock().unwrap();
+        let mut scan_result = scan_result.write().unwrap();
+
         let scan_result = match &mut *scan_result {
             Some(scan_result) => scan_result,
             None => return Ok(()),
@@ -421,7 +423,7 @@ impl FileProcessor {
         Ok(())
     }
 
-    fn get_scan_result(&self) -> Arc<Mutex<Option<ScanResult>>> {
+    fn get_scan_result(&self) -> Arc<RwLock<Option<ScanResult>>> {
         Arc::clone(&self.scan_result)
     }
 }
