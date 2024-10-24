@@ -76,7 +76,7 @@
 		</div>
 	</div>
 
-	{#if selectedCategory && selectedCategoryFiles.length > 0}
+	{#if selectedCategory}
 		<!-- File list -->
 		<Card.Root>
 			<Card.Header>
@@ -89,23 +89,29 @@
 				</Card.Title>
 			</Card.Header>
 			<Card.Content>
-				<VirtualList width="100%" height={480} itemCount={selectedCategory.count} itemSize={100}>
-					<div
-						slot="item"
-						let:index
-						let:style
-						class="flex items-center justify-between space-x-4 border-zinc-700 px-4"
-						{style}
-					>
-						<div class="flex-1">
-							<p class="text-medium">{getFileName(selectedCategoryFiles[index].path)}</p>
-							<p class="text-xs text-gray-400">{selectedCategoryFiles[index].path}</p>
-						</div>
-						<span class="text-xs text-gray-400"
-							>{humanizeFileSize(selectedCategoryFiles[index].size)}</span
+				{#if selectedCategoryFiles.length > 0}
+					<VirtualList width="100%" height={480} itemCount={selectedCategory.count} itemSize={100}>
+						<div
+							slot="item"
+							let:index
+							let:style
+							class="flex items-center justify-between space-x-4 border-zinc-700 px-4"
+							{style}
 						>
+							<div class="flex-1">
+								<p class="text-medium">{getFileName(selectedCategoryFiles[index].path)}</p>
+								<p class="text-xs text-gray-400">{selectedCategoryFiles[index].path}</p>
+							</div>
+							<span class="text-xs text-gray-400"
+								>{humanizeFileSize(selectedCategoryFiles[index].size)}</span
+							>
+						</div>
+					</VirtualList>
+				{:else}
+					<div class="flex h-[480px] items-center justify-center">
+						<p class="text-gray-400">No files available in this category.</p>
 					</div>
-				</VirtualList>
+				{/if}
 			</Card.Content>
 		</Card.Root>
 	{/if}
