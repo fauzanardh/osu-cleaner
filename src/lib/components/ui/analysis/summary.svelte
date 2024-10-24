@@ -16,12 +16,14 @@
 
 	let {
 		data = null,
+		showDeleteConfirm = $bindable(false),
 		isDeleting = $bindable(false),
 		onCategoryExpandClick,
 		onDelete,
 		onDeleteComplete
 	} = $props<{
 		data: CategorySummaryResponse | null;
+		showDeleteConfirm: boolean;
 		isDeleting: boolean;
 		onCategoryExpandClick: (category: string) => void;
 		onDelete: (selectedCategories: string[]) => Promise<void>;
@@ -43,7 +45,6 @@
 		onDelete(selectedCategories);
 	};
 
-	let showDeleteConfirm = $state<boolean>(false);
 	let totalSize = $state<number>(0);
 	$effect(() => {
 		totalSize = Object.values(categoryContext.categories).reduce(

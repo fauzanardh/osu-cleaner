@@ -30,19 +30,13 @@
 		isDeleting: boolean;
 	}>();
 
-	const alertContext = getContext<{
-		alerts: AlertMessage[];
-		dismiss: (id: string) => void;
-		show: (alert: Omit<AlertMessage, 'id'>) => void;
-		clear: () => void;
-	}>('alerts');
-
 	const fileProcessor = new FileProcessorService();
 
 	let error: string | null = $state<string | null>(null);
 	let currentCategory = $state<CategoryUI | null>(null);
 	let completedCategories = $state<Set<string>>(new Set());
 	let isSuccess = $state<boolean>(false);
+	let isCancelling = $state<boolean>(false);
 	let unsubscriber: Promise<UnlistenFn>[] = [];
 
 	const categoryDeletionStartHandler = (event: Event<string>) => {
@@ -53,6 +47,8 @@
 	};
 
 	const categoryDeletionCompleteHandler = (event: Event<string>) => {
+		if (isCancelling) return;
+
 		completedCategories.add(event.payload);
 		if (completedCategories.size === selectedCategories.length) {
 			isSuccess = true;
@@ -90,14 +86,11 @@
 
 	const cancelDelete = async () => {
 		if (isDeleting) {
+			isCancelling = true;
 			await fileProcessor.cancelOperation();
-			alertContext.show({
-				type: 'warning',
-				title: 'Deletion Cancelled',
-				message: 'Deletion operation was cancelled'
-			});
+		} else {
+			show = false;
 		}
-		show = false;
 	};
 
 	$effect(() => {
@@ -105,6 +98,7 @@
 			error = null;
 			isDeleting = false;
 			isSuccess = false;
+			isCancelling = false;
 			currentCategory = null;
 			completedCategories.clear();
 		}
@@ -201,7 +195,14 @@
 				</AlertDialog.Header>
 				<AlertDialog.Footer class="gap-2">
 					<AlertDialog.Cancel asChild>
-						<Button on:click={cancelDelete}>Cancel</Button>
+						<Button on:click={cancelDelete} disabled={isCancelling}>
+							{#if isCancelling}
+								<Loader2 class="mr-2 h-4 w-4 animate-spin" />
+								Cancelling...
+							{:else}
+								Cancel
+							{/if}
+						</Button>
 					</AlertDialog.Cancel>
 					<AlertDialog.Action asChild>
 						<Button variant="destructive" disabled={isDeleting} on:click={handleDelete}>

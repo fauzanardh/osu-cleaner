@@ -477,6 +477,10 @@ impl FileProcessor {
             }
             app.emit(deletion::CATEGORY_COMPLETE, category).unwrap();
         }
+        if token.is_cancelled() {
+            app.emit(file_processor::STATUS, status_values::DELETION_CANCELLED)
+                .unwrap();
+        }
 
         Ok(())
     }

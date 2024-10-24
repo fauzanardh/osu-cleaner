@@ -53,6 +53,8 @@
 
 	const fileProcessor = new FileProcessorService();
 	let unsubscriber: Promise<UnlistenFn>[] = [];
+	let isDeleting = $state<boolean>(false);
+	let showDeleteConfirm = $state<boolean>(false);
 
 	const scannerStatusHandler = (event: Event<string>) => {
 		switch (event.payload) {
@@ -71,7 +73,6 @@
 			case statusValues.SCAN_CANCELLED ||
 				statusValues.PARSE_CANCELLED ||
 				statusValues.FILTER_CANCELLED:
-				console.log('Cancelled');
 				alertContext.show({
 					type: 'warning',
 					title: 'Cancelled',
@@ -79,6 +80,8 @@
 				});
 				break;
 			case statusValues.DELETION_CANCELLED:
+				isDeleting = false;
+				showDeleteConfirm = false;
 				alertContext.show({
 					type: 'warning',
 					title: 'Cancelled',
@@ -184,7 +187,6 @@
 		}
 	};
 
-	let isDeleting = $state<boolean>(false);
 	const handleDeletion = async (selectedCategories: string[]) => {
 		try {
 			isDeleting = true;
@@ -246,13 +248,14 @@
 	{:else if analyzerContext.analyzer.status === 'complete'}
 		<Summary
 			data={analyzerContext.analyzer.summary}
+			bind:showDeleteConfirm
+			bind:isDeleting
 			{onCategoryExpandClick}
 			onDelete={handleDeletion}
 			onDeleteComplete={() => {
 				analyzerContext.reset();
 				selectedDirectory = '';
 			}}
-			bind:isDeleting
 		/>
 	{/if}
 </div>
