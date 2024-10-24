@@ -12,6 +12,7 @@ use rayon::prelude::*;
 use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
 
+use crate::core::consts::{deletion, scanner, status_values};
 use crate::core::counters::{CommonCounterState, FilterCounterState};
 use crate::core::models::{
     CategoryDataResponse, CategoryDetailSimple, CategorySummaryResponse, FileInfo, FileType,
@@ -45,7 +46,7 @@ impl FileProcessor {
         if force {
             let count = self.scan_counters.get_and_reset();
             if count > 0 {
-                app.emit("scanner_scan_counts", count).unwrap();
+                app.emit(scanner::SCAN_COUNTS, count).unwrap();
             }
         } else {
             let now = SystemTime::now()
@@ -62,7 +63,7 @@ impl FileProcessor {
                 {
                     let count = self.scan_counters.get_and_reset();
                     if count > 0 {
-                        app.emit("scanner_scan_counts", count).unwrap();
+                        app.emit(scanner::SCAN_COUNTS, count).unwrap();
                     }
                 }
             }
@@ -74,7 +75,7 @@ impl FileProcessor {
         if force {
             let count = self.parse_counters.get_and_reset();
             if count > 0 {
-                app.emit("scanner_parse_counts", count).unwrap();
+                app.emit(scanner::PARSE_COUNTS, count).unwrap();
             }
         } else {
             let now = SystemTime::now()
@@ -91,7 +92,7 @@ impl FileProcessor {
                 {
                     let count = self.parse_counters.get_and_reset();
                     if count > 0 {
-                        app.emit("scanner_parse_counts", count).unwrap();
+                        app.emit(scanner::PARSE_COUNTS, count).unwrap();
                     }
                 }
             }
@@ -103,7 +104,7 @@ impl FileProcessor {
         if force {
             let counts = self.filter_counters.get_and_reset();
             if counts.values().any(|&count| count > 0) {
-                app.emit("scanner_filter_counts", counts).unwrap();
+                app.emit(scanner::FILTER_COUNTS, counts).unwrap();
             }
         } else {
             let now = SystemTime::now()
@@ -120,7 +121,7 @@ impl FileProcessor {
                 {
                     let counts = self.filter_counters.get_and_reset();
                     if counts.values().any(|&count| count > 0) {
-                        app.emit("scanner_filter_counts", counts).unwrap();
+                        app.emit(scanner::FILTER_COUNTS, counts).unwrap();
                     }
                 }
             }
@@ -189,7 +190,8 @@ impl FileProcessor {
     pub fn scan_directory(&self, app: Arc<AppHandle>, path: &Path) -> Result<()> {
         println!("Scanning requested for {:?}", path);
 
-        app.emit("scanner_status", "scan_start").unwrap();
+        app.emit(scanner::STATUS, status_values::SCAN_START)
+            .unwrap();
         let entries: Vec<_> = WalkDir::new(path)
             .into_iter()
             .filter_map(|e| {
@@ -205,7 +207,8 @@ impl FileProcessor {
             .collect();
         self.try_emit_scan_counts(&app, true); // Flush remaining counts
 
-        app.emit("scanner_status", "parse_start").unwrap();
+        app.emit(scanner::STATUS, status_values::PARSE_START)
+            .unwrap();
         let scan_context = entries
             .par_iter()
             .filter(|entry| {
@@ -241,7 +244,8 @@ impl FileProcessor {
             );
         self.try_emit_parse_counts(&app, true); // Flush remaining counts
 
-        app.emit("scanner_status", "filter_start").unwrap();
+        app.emit(scanner::STATUS, status_values::FILTER_START)
+            .unwrap();
         let patterns = FilePatterns::new();
         let scan_result = entries
             .par_iter()
@@ -403,7 +407,7 @@ impl FileProcessor {
                 category, file_type
             );
 
-            app.emit("deletion_category_start", category).unwrap();
+            app.emit(deletion::CATEGORY_START, category).unwrap();
             if let Some(files) = scan_result.files.get_mut(&file_type) {
                 files.par_iter().for_each(|file| {
                     if let Err(e) = std::fs::remove_file(&file.path) {
@@ -411,7 +415,7 @@ impl FileProcessor {
                     }
                 });
             }
-            app.emit("deletion_category_complete", category).unwrap();
+            app.emit(deletion::CATEGORY_COMPLETE, category).unwrap();
         });
 
         Ok(())

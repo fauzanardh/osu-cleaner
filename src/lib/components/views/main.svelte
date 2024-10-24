@@ -11,6 +11,7 @@
 	import Analyzer from '$lib/components/ui/analysis/analyzer.svelte';
 	import Summary from '$lib/components/ui/analysis/summary.svelte';
 
+	import { scanner, statusValues } from '$lib/consts';
 	import { FileProcessorService } from '$lib/services/file_processor';
 	import type {
 		AlertMessage,
@@ -30,15 +31,15 @@
 
 	const scannerStatusHandler = (event: Event<string>) => {
 		switch (event.payload) {
-			case 'scan_start':
+			case statusValues.SCAN_START:
 				analyzerContext.setStatus('scanning');
 				analyzerContext.updateUI('Scanning osu! Directory...', 'Found 0 files');
 				break;
-			case 'parse_start':
+			case statusValues.PARSE_START:
 				analyzerContext.setStatus('parsing');
 				analyzerContext.updateUI('Parsing Files...', 'Parsed 0 files');
 				break;
-			case 'filter_start':
+			case statusValues.FILTER_START:
 				analyzerContext.setStatus('filtering');
 				analyzerContext.updateUI('Filtering Files...', '');
 				break;
@@ -59,10 +60,10 @@
 
 	$effect(() => {
 		unsubscriber = [
-			listen<string>('scanner_status', scannerStatusHandler),
-			listen<number>('scanner_scan_counts', scannerScanCountsHandler),
-			listen<number>('scanner_parse_counts', scannerParseCountsHandler),
-			listen<CounterUpdate>('scanner_filter_counts', scannerFilterCountsHandler)
+			listen<string>(scanner.STATUS, scannerStatusHandler),
+			listen<number>(scanner.SCAN_COUNTS, scannerScanCountsHandler),
+			listen<number>(scanner.PARSE_COUNTS, scannerParseCountsHandler),
+			listen<CounterUpdate>(scanner.FILTER_COUNTS, scannerFilterCountsHandler)
 		];
 
 		return () => {

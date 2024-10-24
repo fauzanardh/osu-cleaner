@@ -8,6 +8,7 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Button } from '$lib/components/ui/button';
 
+	import { deletion } from '$lib/consts';
 	import { humanizeFileSize } from '$lib/utils/humanize';
 	import type { CategoryUI } from '$lib/utils/interfaces';
 
@@ -51,8 +52,8 @@
 
 	$effect(() => {
 		unsubscriber = [
-			listen<string>('deletion_category_start', categoryDeletionStartHandler),
-			listen<string>('deletion_category_complete', categoryDeletionCompleteHandler)
+			listen<string>(deletion.CATEGORY_START, categoryDeletionStartHandler),
+			listen<string>(deletion.CATEGORY_COMPLETE, categoryDeletionCompleteHandler)
 		];
 
 		return () => {
