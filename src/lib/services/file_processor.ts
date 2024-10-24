@@ -3,6 +3,15 @@ import { invoke } from '@tauri-apps/api/core';
 import type { CategorySummaryResponse, CategoryDataResponse } from '$lib/utils/interfaces.ts';
 
 export class FileProcessorService {
+    async cancelOperation(): Promise<void> {
+        try {
+            await invoke('cancel_operation');
+        } catch (error) {
+            console.log('Error while cancelling operation:', error);
+            throw error;
+        }
+    }
+
     async scanDirectory(path: string): Promise<void> {
         try {
             await invoke('scan_directory', { path });

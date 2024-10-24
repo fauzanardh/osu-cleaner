@@ -12,7 +12,8 @@ use rayon::prelude::*;
 use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
 
-use crate::core::consts::{deletion, scanner, status_values};
+use crate::core::cancel::CancellationToken;
+use crate::core::consts::{deletion, file_processor, status_values};
 use crate::core::counters::{CommonCounterState, FilterCounterState};
 use crate::core::models::{
     CategoryDataResponse, CategoryDetailSimple, CategorySummaryResponse, FileInfo, FileType,
@@ -46,7 +47,7 @@ impl FileProcessor {
         if force {
             let count = self.scan_counters.get_and_reset();
             if count > 0 {
-                app.emit(scanner::SCAN_COUNTS, count).unwrap();
+                app.emit(file_processor::SCAN_COUNTS, count).unwrap();
             }
         } else {
             let now = SystemTime::now()
@@ -63,7 +64,7 @@ impl FileProcessor {
                 {
                     let count = self.scan_counters.get_and_reset();
                     if count > 0 {
-                        app.emit(scanner::SCAN_COUNTS, count).unwrap();
+                        app.emit(file_processor::SCAN_COUNTS, count).unwrap();
                     }
                 }
             }
@@ -75,7 +76,7 @@ impl FileProcessor {
         if force {
             let count = self.parse_counters.get_and_reset();
             if count > 0 {
-                app.emit(scanner::PARSE_COUNTS, count).unwrap();
+                app.emit(file_processor::PARSE_COUNTS, count).unwrap();
             }
         } else {
             let now = SystemTime::now()
@@ -92,7 +93,7 @@ impl FileProcessor {
                 {
                     let count = self.parse_counters.get_and_reset();
                     if count > 0 {
-                        app.emit(scanner::PARSE_COUNTS, count).unwrap();
+                        app.emit(file_processor::PARSE_COUNTS, count).unwrap();
                     }
                 }
             }
@@ -104,7 +105,7 @@ impl FileProcessor {
         if force {
             let counts = self.filter_counters.get_and_reset();
             if counts.values().any(|&count| count > 0) {
-                app.emit(scanner::FILTER_COUNTS, counts).unwrap();
+                app.emit(file_processor::FILTER_COUNTS, counts).unwrap();
             }
         } else {
             let now = SystemTime::now()
@@ -121,7 +122,7 @@ impl FileProcessor {
                 {
                     let counts = self.filter_counters.get_and_reset();
                     if counts.values().any(|&count| count > 0) {
-                        app.emit(scanner::FILTER_COUNTS, counts).unwrap();
+                        app.emit(file_processor::FILTER_COUNTS, counts).unwrap();
                     }
                 }
             }
@@ -187,15 +188,30 @@ impl FileProcessor {
         Some(&line[start + 1..start + 1 + end])
     }
 
-    pub fn scan_directory(&self, app: &AppHandle, path: &Path) -> Result<()> {
+    pub fn scan_directory(
+        &self,
+        app: &AppHandle,
+        path: &Path,
+        token: CancellationToken,
+    ) -> Result<()> {
+        if token.is_cancelled() {
+            app.emit(file_processor::STATUS, status_values::SCAN_CANCELLED)
+                .unwrap();
+            return Ok(());
+        }
+
         println!("Scanning requested for {:?}", path);
 
-        app.emit(scanner::STATUS, status_values::SCAN_START)
+        app.emit(file_processor::STATUS, status_values::SCAN_START)
             .unwrap();
         let entries: Vec<_> = WalkDir::new(path)
             .into_iter()
             .par_bridge()
             .filter_map(|e| {
+                if token.is_cancelled() {
+                    return None;
+                }
+
                 if let Ok(e) = e {
                     if e.file_type().is_file() {
                         self.scan_counters.increment();
@@ -207,12 +223,21 @@ impl FileProcessor {
             })
             .collect();
         self.try_emit_scan_counts(app, true); // Flush remaining counts
+        if token.is_cancelled() {
+            app.emit(file_processor::STATUS, status_values::SCAN_CANCELLED)
+                .unwrap();
+            return Ok(());
+        }
 
-        app.emit(scanner::STATUS, status_values::PARSE_START)
+        app.emit(file_processor::STATUS, status_values::PARSE_START)
             .unwrap();
         let scan_context = entries
             .par_iter()
             .filter(|entry| {
+                if token.is_cancelled() {
+                    return false;
+                }
+
                 if let Some(ext) = entry.path().extension().and_then(|ext| ext.to_str()) {
                     if ext == "osu" || ext == "osb" {
                         self.parse_counters.increment();
@@ -244,13 +269,22 @@ impl FileProcessor {
                 },
             );
         self.try_emit_parse_counts(app, true); // Flush remaining counts
+        if token.is_cancelled() {
+            app.emit(file_processor::STATUS, status_values::PARSE_CANCELLED)
+                .unwrap();
+            return Ok(());
+        }
 
-        app.emit(scanner::STATUS, status_values::FILTER_START)
+        app.emit(file_processor::STATUS, status_values::FILTER_START)
             .unwrap();
         let patterns = FilePatterns::new();
         let scan_result = entries
             .par_iter()
             .filter_map(|entry| {
+                if token.is_cancelled() {
+                    return None;
+                }
+
                 let path = entry.path();
                 let file_type = self.categorize_file(&patterns, &app, path, &scan_context);
 
@@ -286,6 +320,11 @@ impl FileProcessor {
                 a
             });
         self.try_emit_filter_counts(app, true); // Flush remaining counts
+        if token.is_cancelled() {
+            app.emit(file_processor::STATUS, status_values::FILTER_CANCELLED)
+                .unwrap();
+            return Ok(());
+        }
 
         *self.scan_result.write().unwrap() = Some(scan_result);
         Ok(())
@@ -384,7 +423,18 @@ impl FileProcessor {
         })
     }
 
-    pub fn delete_files(&self, app: &AppHandle, categories: Vec<&str>) -> Result<()> {
+    pub fn delete_files(
+        &self,
+        app: &AppHandle,
+        categories: Vec<&str>,
+        token: CancellationToken,
+    ) -> Result<()> {
+        if token.is_cancelled() {
+            app.emit(file_processor::STATUS, status_values::DELETION_CANCELLED)
+                .unwrap();
+            return Ok(());
+        }
+
         let scan_result = self.get_scan_result();
         let mut scan_result = scan_result.write().unwrap();
 
@@ -393,14 +443,20 @@ impl FileProcessor {
             None => return Ok(()),
         };
 
-        categories.iter().for_each(|category| {
-            let file_type = match *category {
+        for category in categories {
+            if token.is_cancelled() {
+                app.emit(file_processor::STATUS, status_values::DELETION_CANCELLED)
+                    .unwrap();
+                return Ok(());
+            }
+
+            let file_type = match category {
                 "background_video" => FileType::BackgroundVideo,
                 "background_image" => FileType::BackgroundImage,
                 "storyboard" => FileType::Storyboard,
                 "skin_element" => FileType::SkinElement,
                 "hitsound" => FileType::Hitsound,
-                _ => return,
+                _ => continue,
             };
 
             println!(
@@ -411,13 +467,20 @@ impl FileProcessor {
             app.emit(deletion::CATEGORY_START, category).unwrap();
             if let Some(files) = scan_result.files.get_mut(&file_type) {
                 files.par_drain(..).for_each(|file| {
+                    if token.is_cancelled() {
+                        return;
+                    }
                     if let Err(e) = std::fs::remove_file(&file.path) {
                         eprintln!("Failed to delete file {:?}: {}", file.path, e);
                     }
                 });
             }
             app.emit(deletion::CATEGORY_COMPLETE, category).unwrap();
-        });
+        }
+        if token.is_cancelled() {
+            app.emit(file_processor::STATUS, status_values::DELETION_CANCELLED)
+                .unwrap();
+        }
 
         Ok(())
     }

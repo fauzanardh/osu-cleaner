@@ -43,7 +43,7 @@ interface FilterCounts {
 }
 
 interface AnalyzerState {
-    status: 'idle' | 'scanning' | 'parsing' | 'filtering' | 'complete';
+    status: 'idle' | 'scanning' | 'parsing' | 'filtering' | 'cancelling' | 'complete';
     summary: CategorySummaryResponse | null;
     counts: {
         scanned: number;

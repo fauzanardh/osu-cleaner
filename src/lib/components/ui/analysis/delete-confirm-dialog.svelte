@@ -2,6 +2,7 @@
 	import { cn } from '$lib/utils';
 	import { listen, type Event, type UnlistenFn } from '@tauri-apps/api/event';
 	import { AlertCircle, CheckCircle2, Loader2, XCircle } from 'lucide-svelte';
+	import { getContext } from 'svelte';
 	import { quintOut } from 'svelte/easing';
 	import { fly } from 'svelte/transition';
 
@@ -10,7 +11,8 @@
 
 	import { deletion } from '$lib/consts';
 	import { humanizeFileSize } from '$lib/utils/humanize';
-	import type { CategoryUI } from '$lib/utils/interfaces';
+	import type { AlertMessage, CategoryUI } from '$lib/utils/interfaces';
+	import { FileProcessorService } from '$lib/services/file_processor';
 
 	let {
 		show = $bindable(false),
@@ -28,10 +30,13 @@
 		isDeleting: boolean;
 	}>();
 
+	const fileProcessor = new FileProcessorService();
+
 	let error: string | null = $state<string | null>(null);
 	let currentCategory = $state<CategoryUI | null>(null);
 	let completedCategories = $state<Set<string>>(new Set());
 	let isSuccess = $state<boolean>(false);
+	let isCancelling = $state<boolean>(false);
 	let unsubscriber: Promise<UnlistenFn>[] = [];
 
 	const categoryDeletionStartHandler = (event: Event<string>) => {
@@ -42,6 +47,8 @@
 	};
 
 	const categoryDeletionCompleteHandler = (event: Event<string>) => {
+		if (isCancelling) return;
+
 		completedCategories.add(event.payload);
 		if (completedCategories.size === selectedCategories.length) {
 			isSuccess = true;
@@ -77,11 +84,21 @@
 		}
 	};
 
+	const cancelDelete = async () => {
+		if (isDeleting) {
+			isCancelling = true;
+			await fileProcessor.cancelOperation();
+		} else {
+			show = false;
+		}
+	};
+
 	$effect(() => {
 		if (show) {
 			error = null;
 			isDeleting = false;
 			isSuccess = false;
+			isCancelling = false;
 			currentCategory = null;
 			completedCategories.clear();
 		}
@@ -178,7 +195,14 @@
 				</AlertDialog.Header>
 				<AlertDialog.Footer class="gap-2">
 					<AlertDialog.Cancel asChild>
-						<Button disabled={isDeleting} on:click={() => (show = false)}>Cancel</Button>
+						<Button on:click={cancelDelete} disabled={isCancelling}>
+							{#if isCancelling}
+								<Loader2 class="mr-2 h-4 w-4 animate-spin" />
+								Cancelling...
+							{:else}
+								Cancel
+							{/if}
+						</Button>
 					</AlertDialog.Cancel>
 					<AlertDialog.Action asChild>
 						<Button variant="destructive" disabled={isDeleting} on:click={handleDelete}>

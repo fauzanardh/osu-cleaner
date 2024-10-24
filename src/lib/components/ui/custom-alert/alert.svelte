@@ -45,13 +45,9 @@
 	}>('alerts');
 </script>
 
-<div class="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+<div class="fixed left-4 right-4 top-4 z-50 flex flex-col gap-2">
 	{#each alertContext.alerts as alert (alert.id)}
-		<div
-			class="w-full max-w-md"
-			transition:fly={{ y: 30, duration: 300, easing: quintOut }}
-			role="alert"
-		>
+		<div class="w-full" transition:fly={{ y: -30, duration: 300, easing: quintOut }} role="alert">
 			<Alert.Root class={`relative ${alertStyles[alert.type].container}`}>
 				<svelte:component
 					this={icons[alert.type]}
