@@ -69,7 +69,7 @@
 	</div>
 	<div class="flex flex-col items-end text-right">
 		<span class="text-sm font-medium">{humanizeFileSize(category.size)}</span>
-		<span class="text-xs text-gray-400">{Math.round(category.count)} files</span>
+		<span class="text-xs text-gray-400">{category.count} files</span>
 	</div>
 	<button onclick={() => beforeCategoryExpandClick()}>
 		<ChevronRight class="h-5 w-5" />
