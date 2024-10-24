@@ -21,8 +21,8 @@ impl FileProcessorService {
     }
 
     pub fn scan_directory(&self, path: &Path) -> Result<()> {
-        self.file_processor
-            .scan_directory(Arc::clone(&self.app), path)
+        let app = self.app.clone();
+        self.file_processor.scan_directory(&app, path)
     }
 
     pub fn get_category_summary(&self) -> Option<CategorySummaryResponse> {
@@ -34,8 +34,8 @@ impl FileProcessorService {
     }
 
     pub fn delete_files(&self, categories: Vec<&str>) -> Result<()> {
-        self.file_processor
-            .delete_files(Arc::clone(&self.app), categories)
+        let app = self.app.clone();
+        self.file_processor.delete_files(&app, categories)
     }
 }
 

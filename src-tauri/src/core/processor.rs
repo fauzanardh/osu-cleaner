@@ -187,7 +187,7 @@ impl FileProcessor {
         Some(&line[start + 1..start + 1 + end])
     }
 
-    pub fn scan_directory(&self, app: Arc<AppHandle>, path: &Path) -> Result<()> {
+    pub fn scan_directory(&self, app: &AppHandle, path: &Path) -> Result<()> {
         println!("Scanning requested for {:?}", path);
 
         app.emit(scanner::STATUS, status_values::SCAN_START)
@@ -199,14 +199,14 @@ impl FileProcessor {
                 if let Ok(e) = e {
                     if e.file_type().is_file() {
                         self.scan_counters.increment();
-                        self.try_emit_scan_counts(&app, false);
+                        self.try_emit_scan_counts(app, false);
                         return Some(e);
                     }
                 }
                 None
             })
             .collect();
-        self.try_emit_scan_counts(&app, true); // Flush remaining counts
+        self.try_emit_scan_counts(app, true); // Flush remaining counts
 
         app.emit(scanner::STATUS, status_values::PARSE_START)
             .unwrap();
@@ -216,7 +216,7 @@ impl FileProcessor {
                 if let Some(ext) = entry.path().extension().and_then(|ext| ext.to_str()) {
                     if ext == "osu" || ext == "osb" {
                         self.parse_counters.increment();
-                        self.try_emit_parse_counts(&app, false);
+                        self.try_emit_parse_counts(app, false);
                         return true;
                     }
                 }
@@ -243,7 +243,7 @@ impl FileProcessor {
                     a
                 },
             );
-        self.try_emit_parse_counts(&app, true); // Flush remaining counts
+        self.try_emit_parse_counts(app, true); // Flush remaining counts
 
         app.emit(scanner::STATUS, status_values::FILTER_START)
             .unwrap();
@@ -252,8 +252,7 @@ impl FileProcessor {
             .par_iter()
             .filter_map(|entry| {
                 let path = entry.path();
-                let file_type =
-                    self.categorize_file(&patterns, Arc::clone(&app), path, &scan_context);
+                let file_type = self.categorize_file(&patterns, &app, path, &scan_context);
 
                 if file_type == FileType::Other {
                     return None;
@@ -286,7 +285,7 @@ impl FileProcessor {
                 }
                 a
             });
-        self.try_emit_filter_counts(&app, true); // Flush remaining counts
+        self.try_emit_filter_counts(app, true); // Flush remaining counts
 
         *self.scan_result.write().unwrap() = Some(scan_result);
         Ok(())
@@ -295,7 +294,7 @@ impl FileProcessor {
     fn categorize_file(
         &self,
         patterns: &FilePatterns,
-        app: Arc<AppHandle>,
+        app: &AppHandle,
         path: &Path,
         context: &ScanContext,
     ) -> FileType {
@@ -318,7 +317,7 @@ impl FileProcessor {
         };
 
         self.filter_counters.increment(file_type);
-        self.try_emit_filter_counts(&app, false);
+        self.try_emit_filter_counts(app, false);
         file_type
     }
 
@@ -385,7 +384,7 @@ impl FileProcessor {
         })
     }
 
-    pub fn delete_files(&self, app: Arc<AppHandle>, categories: Vec<&str>) -> Result<()> {
+    pub fn delete_files(&self, app: &AppHandle, categories: Vec<&str>) -> Result<()> {
         let scan_result = self.get_scan_result();
         let mut scan_result = scan_result.write().unwrap();
 
@@ -411,7 +410,7 @@ impl FileProcessor {
 
             app.emit(deletion::CATEGORY_START, category).unwrap();
             if let Some(files) = scan_result.files.get_mut(&file_type) {
-                files.par_iter().for_each(|file| {
+                files.par_drain(..).for_each(|file| {
                     if let Err(e) = std::fs::remove_file(&file.path) {
                         eprintln!("Failed to delete file {:?}: {}", file.path, e);
                     }
