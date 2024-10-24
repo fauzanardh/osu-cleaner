@@ -95,10 +95,6 @@
 		}
 	};
 
-	$effect(() => {
-		console.log(analyzerContext.analyzer.status);
-	});
-
 	const scannerScanCountsHandler = (event: Event<number>) => {
 		analyzerContext.updateScanCount(event.payload);
 	};
@@ -145,7 +141,6 @@
 
 	const cancelOperation = async () => {
 		try {
-			console.log('Cancelling operation...');
 			analyzerContext.setStatus('cancelling');
 			analyzerContext.updateUI('Cancelling...', '');
 			await fileProcessor.cancelOperation();
@@ -169,9 +164,7 @@
 		}
 
 		try {
-			console.log('Scanning directory...');
 			await fileProcessor.scanDirectory(selectedDirectory);
-			console.log('Completed scanning directory');
 			let categorySummary = await fileProcessor.getCategorySummary();
 			if (analyzerContext.analyzer.status === 'cancelling') {
 				analyzerContext.setStatus('idle');
