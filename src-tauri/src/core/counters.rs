@@ -31,7 +31,7 @@ pub struct FilterCounterState {
     storyboard: AtomicUsize,
     skin_element: AtomicUsize,
     hitsound: AtomicUsize,
-    unknown: AtomicUsize,
+    other: AtomicUsize,
 }
 
 impl FilterCounterState {
@@ -42,7 +42,7 @@ impl FilterCounterState {
             storyboard: AtomicUsize::new(0),
             skin_element: AtomicUsize::new(0),
             hitsound: AtomicUsize::new(0),
-            unknown: AtomicUsize::new(0),
+            other: AtomicUsize::new(0),
         }
     }
 
@@ -53,7 +53,7 @@ impl FilterCounterState {
             FileType::Storyboard => self.storyboard.fetch_add(1, Ordering::Relaxed),
             FileType::SkinElement => self.skin_element.fetch_add(1, Ordering::Relaxed),
             FileType::Hitsound => self.hitsound.fetch_add(1, Ordering::Relaxed),
-            FileType::Other => self.unknown.fetch_add(1, Ordering::Relaxed),
+            FileType::Other => self.other.fetch_add(1, Ordering::Relaxed),
         };
     }
 
@@ -70,7 +70,7 @@ impl FilterCounterState {
         counts.insert("storyboard", self.storyboard.swap(0, Ordering::Relaxed));
         counts.insert("skin_element", self.skin_element.swap(0, Ordering::Relaxed));
         counts.insert("hitsound", self.hitsound.swap(0, Ordering::Relaxed));
-        counts.insert("other", self.unknown.swap(0, Ordering::Relaxed));
+        counts.insert("other", self.other.swap(0, Ordering::Relaxed));
         counts
     }
 }
