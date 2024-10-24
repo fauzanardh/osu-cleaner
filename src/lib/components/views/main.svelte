@@ -82,6 +82,10 @@
 			case statusValues.DELETION_CANCELLED:
 				isDeleting = false;
 				showDeleteConfirm = false;
+				fileProcessor.getCategorySummary().then((summary) => {
+					categoryContext.updateCategory(summary);
+					analyzerContext.setSummary(summary);
+				});
 				alertContext.show({
 					type: 'warning',
 					title: 'Cancelled',
