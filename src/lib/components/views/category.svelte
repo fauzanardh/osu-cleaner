@@ -53,7 +53,7 @@
 	};
 </script>
 
-<div class="space-y-6">
+<div class="space-y-4">
 	<div class="flex items-center justify-between">
 		<Button variant="ghost" on:click={() => setCurrentView('main')} class="flex items-center gap-2">
 			<ArrowLeft class="h-5 w-5" />
@@ -89,7 +89,7 @@
 				</Card.Title>
 			</Card.Header>
 			<Card.Content>
-				<VirtualList width="100%" height={500} itemCount={selectedCategory.count} itemSize={100}>
+				<VirtualList width="100%" height={480} itemCount={selectedCategory.count} itemSize={100}>
 					<div
 						slot="item"
 						let:index

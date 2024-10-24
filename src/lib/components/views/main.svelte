@@ -159,7 +159,7 @@
 	};
 </script>
 
-<div class="space-y-6">
+<div class="space-y-4">
 	<Card.Root>
 		<Card.Header>
 			<Card.Title class="flex items-center gap-2">

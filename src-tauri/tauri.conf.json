@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "osu!cleaner",
-        "width": 540,
-        "height": 820,
+        "width": 600,
+        "height": 800,
         "resizable": true,
         "fullscreen": false
       }
