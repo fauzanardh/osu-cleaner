@@ -337,7 +337,10 @@ impl FileProcessor {
         path: &Path,
         context: &ScanContext,
     ) -> FileType {
-        let file_type = if patterns.is_video(path) {
+        let file_type = if path.extension().and_then(|ext| ext.to_str()) == Some("osu") {
+            // Force osu file type just in case the parser missed it
+            FileType::Other
+        } else if patterns.is_video(path) {
             FileType::BackgroundVideo
         } else if context.backgrounds.contains(path) {
             FileType::BackgroundImage
