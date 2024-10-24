@@ -22,8 +22,6 @@ interface CategorySummaryResponse {
     hitsound: CategoryDetailSimple;
 }
 
-type FileType = 'BackgroundVideo' | 'BackgroundImage' | 'Storyboard' | 'Hitsound' | 'SkinElement' | 'Unknown';
-
 interface FileInfo {
     path: string;
     size: number;
@@ -92,7 +90,6 @@ export type {
     CounterUpdate,
     CategorySummaryResponse,
     CategoryDataResponse,
-    FileType,
     FileInfo,
     AlertType,
     FilterCounts,

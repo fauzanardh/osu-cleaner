@@ -1,3 +1,4 @@
+pub mod consts;
 pub mod counters;
 pub mod models;
 pub mod patterns;

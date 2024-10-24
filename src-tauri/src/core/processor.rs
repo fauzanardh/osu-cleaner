@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use ahash::AHashMap;
@@ -12,6 +12,7 @@ use rayon::prelude::*;
 use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
 
+use crate::core::consts::{deletion, scanner, status_values};
 use crate::core::counters::{CommonCounterState, FilterCounterState};
 use crate::core::models::{
     CategoryDataResponse, CategoryDetailSimple, CategorySummaryResponse, FileInfo, FileType,
@@ -25,13 +26,13 @@ pub struct FileProcessor {
     scan_counters: Arc<CommonCounterState>,
     parse_counters: Arc<CommonCounterState>,
     filter_counters: Arc<FilterCounterState>,
-    scan_result: Arc<Mutex<Option<ScanResult>>>,
+    scan_result: Arc<RwLock<Option<ScanResult>>>,
 }
 
 impl FileProcessor {
     pub fn new() -> Self {
         Self {
-            scan_result: Arc::new(Mutex::new(None)),
+            scan_result: Arc::new(RwLock::new(None)),
             last_emit: Arc::new(AtomicU64::new(0)),
             emit_interval: 1_000_000 / 20, // 20 times per second
             scan_counters: Arc::new(CommonCounterState::new()),
@@ -45,7 +46,7 @@ impl FileProcessor {
         if force {
             let count = self.scan_counters.get_and_reset();
             if count > 0 {
-                app.emit("scanner_scan_counts", count).unwrap();
+                app.emit(scanner::SCAN_COUNTS, count).unwrap();
             }
         } else {
             let now = SystemTime::now()
@@ -62,7 +63,7 @@ impl FileProcessor {
                 {
                     let count = self.scan_counters.get_and_reset();
                     if count > 0 {
-                        app.emit("scanner_scan_counts", count).unwrap();
+                        app.emit(scanner::SCAN_COUNTS, count).unwrap();
                     }
                 }
             }
@@ -74,7 +75,7 @@ impl FileProcessor {
         if force {
             let count = self.parse_counters.get_and_reset();
             if count > 0 {
-                app.emit("scanner_parse_counts", count).unwrap();
+                app.emit(scanner::PARSE_COUNTS, count).unwrap();
             }
         } else {
             let now = SystemTime::now()
@@ -91,7 +92,7 @@ impl FileProcessor {
                 {
                     let count = self.parse_counters.get_and_reset();
                     if count > 0 {
-                        app.emit("scanner_parse_counts", count).unwrap();
+                        app.emit(scanner::PARSE_COUNTS, count).unwrap();
                     }
                 }
             }
@@ -103,7 +104,7 @@ impl FileProcessor {
         if force {
             let counts = self.filter_counters.get_and_reset();
             if counts.values().any(|&count| count > 0) {
-                app.emit("scanner_filter_counts", counts).unwrap();
+                app.emit(scanner::FILTER_COUNTS, counts).unwrap();
             }
         } else {
             let now = SystemTime::now()
@@ -120,7 +121,7 @@ impl FileProcessor {
                 {
                     let counts = self.filter_counters.get_and_reset();
                     if counts.values().any(|&count| count > 0) {
-                        app.emit("scanner_filter_counts", counts).unwrap();
+                        app.emit(scanner::FILTER_COUNTS, counts).unwrap();
                     }
                 }
             }
@@ -186,33 +187,36 @@ impl FileProcessor {
         Some(&line[start + 1..start + 1 + end])
     }
 
-    pub fn scan_directory(&self, app: Arc<AppHandle>, path: &Path) -> Result<()> {
+    pub fn scan_directory(&self, app: &AppHandle, path: &Path) -> Result<()> {
         println!("Scanning requested for {:?}", path);
 
-        app.emit("scanner_status", "scan_start").unwrap();
+        app.emit(scanner::STATUS, status_values::SCAN_START)
+            .unwrap();
         let entries: Vec<_> = WalkDir::new(path)
             .into_iter()
+            .par_bridge()
             .filter_map(|e| {
                 if let Ok(e) = e {
                     if e.file_type().is_file() {
                         self.scan_counters.increment();
-                        self.try_emit_scan_counts(&app, false);
+                        self.try_emit_scan_counts(app, false);
                         return Some(e);
                     }
                 }
                 None
             })
             .collect();
-        self.try_emit_scan_counts(&app, true); // Flush remaining counts
+        self.try_emit_scan_counts(app, true); // Flush remaining counts
 
-        app.emit("scanner_status", "parse_start").unwrap();
+        app.emit(scanner::STATUS, status_values::PARSE_START)
+            .unwrap();
         let scan_context = entries
             .par_iter()
             .filter(|entry| {
                 if let Some(ext) = entry.path().extension().and_then(|ext| ext.to_str()) {
                     if ext == "osu" || ext == "osb" {
                         self.parse_counters.increment();
-                        self.try_emit_parse_counts(&app, false);
+                        self.try_emit_parse_counts(app, false);
                         return true;
                     }
                 }
@@ -239,16 +243,16 @@ impl FileProcessor {
                     a
                 },
             );
-        self.try_emit_parse_counts(&app, true); // Flush remaining counts
+        self.try_emit_parse_counts(app, true); // Flush remaining counts
 
-        app.emit("scanner_status", "filter_start").unwrap();
+        app.emit(scanner::STATUS, status_values::FILTER_START)
+            .unwrap();
         let patterns = FilePatterns::new();
         let scan_result = entries
             .par_iter()
             .filter_map(|entry| {
                 let path = entry.path();
-                let file_type =
-                    self.categorize_file(&patterns, Arc::clone(&app), path, &scan_context);
+                let file_type = self.categorize_file(&patterns, &app, path, &scan_context);
 
                 if file_type == FileType::Other {
                     return None;
@@ -281,16 +285,16 @@ impl FileProcessor {
                 }
                 a
             });
-        self.try_emit_filter_counts(&app, true); // Flush remaining counts
+        self.try_emit_filter_counts(app, true); // Flush remaining counts
 
-        *self.scan_result.lock().unwrap() = Some(scan_result);
+        *self.scan_result.write().unwrap() = Some(scan_result);
         Ok(())
     }
 
     fn categorize_file(
         &self,
         patterns: &FilePatterns,
-        app: Arc<AppHandle>,
+        app: &AppHandle,
         path: &Path,
         context: &ScanContext,
     ) -> FileType {
@@ -313,13 +317,13 @@ impl FileProcessor {
         };
 
         self.filter_counters.increment(file_type);
-        self.try_emit_filter_counts(&app, false);
+        self.try_emit_filter_counts(app, false);
         file_type
     }
 
     pub fn get_category_summary(&self) -> Option<CategorySummaryResponse> {
         let binding = self.get_scan_result();
-        let scan_result = binding.lock().unwrap();
+        let scan_result = binding.read().unwrap();
         let scan_result = match &*scan_result {
             Some(scan_result) => scan_result,
             None => return None,
@@ -360,7 +364,7 @@ impl FileProcessor {
 
     pub fn get_category_data(&self, category: &str) -> Option<CategoryDataResponse> {
         let binding = self.get_scan_result();
-        let scan_result = binding.lock().unwrap();
+        let scan_result = binding.read().unwrap();
         let scan_result = match &*scan_result {
             Some(scan_result) => scan_result,
             None => return None,
@@ -380,9 +384,10 @@ impl FileProcessor {
         })
     }
 
-    pub fn delete_files(&self, app: Arc<AppHandle>, categories: Vec<&str>) -> Result<()> {
+    pub fn delete_files(&self, app: &AppHandle, categories: Vec<&str>) -> Result<()> {
         let scan_result = self.get_scan_result();
-        let mut scan_result = scan_result.lock().unwrap();
+        let mut scan_result = scan_result.write().unwrap();
+
         let scan_result = match &mut *scan_result {
             Some(scan_result) => scan_result,
             None => return Ok(()),
@@ -403,21 +408,21 @@ impl FileProcessor {
                 category, file_type
             );
 
-            app.emit("deletion_category_start", category).unwrap();
+            app.emit(deletion::CATEGORY_START, category).unwrap();
             if let Some(files) = scan_result.files.get_mut(&file_type) {
-                files.par_iter().for_each(|file| {
+                files.par_drain(..).for_each(|file| {
                     if let Err(e) = std::fs::remove_file(&file.path) {
                         eprintln!("Failed to delete file {:?}: {}", file.path, e);
                     }
                 });
             }
-            app.emit("deletion_category_complete", category).unwrap();
+            app.emit(deletion::CATEGORY_COMPLETE, category).unwrap();
         });
 
         Ok(())
     }
 
-    fn get_scan_result(&self) -> Arc<Mutex<Option<ScanResult>>> {
+    fn get_scan_result(&self) -> Arc<RwLock<Option<ScanResult>>> {
         Arc::clone(&self.scan_result)
     }
 }

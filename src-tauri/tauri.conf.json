@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "osu-cleaner",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "me.fauzanardh.osu-cleaner",
   "build": {
     "frontendDist": "../build",
@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "osu!cleaner",
-        "width": 540,
-        "height": 820,
+        "width": 600,
+        "height": 800,
         "resizable": true,
         "fullscreen": false
       }
