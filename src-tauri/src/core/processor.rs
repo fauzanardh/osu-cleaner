@@ -208,24 +208,23 @@ impl FileProcessor {
 
         app.emit(file_processor::STATUS, status_values::SCAN_START)
             .unwrap();
-        let entries: Vec<_> = WalkDir::new(path)
-            .into_iter()
-            .par_bridge()
-            .filter_map(|e| {
-                if token.is_cancelled() {
-                    return None;
-                }
+        let mut entries = Vec::new();
+        for entry in WalkDir::new(path).into_iter() {
+            check_token!(
+                file_processor::STATUS,
+                status_values::SCAN_CANCELLED,
+                token,
+                app
+            );
 
-                if let Ok(e) = e {
-                    if e.file_type().is_file() {
-                        self.scan_counters.increment();
-                        self.try_emit_scan_counts(app, false);
-                        return Some(e);
-                    }
+            if let Ok(entry) = entry {
+                if entry.file_type().is_file() {
+                    self.scan_counters.increment();
+                    self.try_emit_scan_counts(app, false);
+                    entries.push(entry);
                 }
-                None
-            })
-            .collect();
+            }
+        }
         self.try_emit_scan_counts(app, true); // Flush remaining counts
         check_token!(
             file_processor::STATUS,
