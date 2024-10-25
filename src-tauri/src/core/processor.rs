@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -130,10 +129,40 @@ impl FileProcessor {
         }
     }
 
-    fn parse_file<F>(&self, path: &Path, context: &mut ScanContext, parser: F) -> Result<()>
-    where
-        F: Fn(&str, &Path, &mut ScanContext) -> Option<()>,
-    {
+    fn parse_osu_file(&self, path: &Path, context: &mut ScanContext) -> Result<()> {
+        let mut file = File::open(path)?;
+        let mut content = String::new();
+        file.read_to_string(&mut content)?;
+        let parent = path.parent().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("failed to get parent directory of {:?}", path),
+            )
+        })?;
+
+        let mut in_events = false;
+        for line in content.lines() {
+            let line = line.trim();
+            if line == "[Events]" {
+                in_events = true;
+                continue;
+            } else if !in_events {
+                continue;
+            } else if line.starts_with('[') {
+                in_events = false;
+                continue;
+            }
+
+            if line.starts_with("0,0,\"") || line.starts_with("Video,") {
+                self.extract_quoted_path(line)
+                    .map(|file_path| context.backgrounds.insert(parent.join(file_path)));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn parse_storyboard_file(&self, path: &Path, context: &mut ScanContext) -> Result<()> {
         let mut file = File::open(path)?;
         let mut content = String::new();
         file.read_to_string(&mut content)?;
@@ -145,41 +174,15 @@ impl FileProcessor {
         })?;
 
         for line in content.lines() {
-            parser(&line, parent, context);
-        }
-        Ok(())
-    }
-
-    fn parse_osu_file(&self, path: &Path, context: &mut ScanContext) -> Result<()> {
-        let in_events = RefCell::new(false);
-        self.parse_file(path, context, |line, parent, context| match line.trim() {
-            "[Events]" => {
-                *in_events.borrow_mut() = true;
-                None
-            }
-            _ if !*in_events.borrow() => None,
-            _ if line.starts_with('[') => {
-                *in_events.borrow_mut() = false;
-                None
-            }
-            _ if line.starts_with("0,0,\"") || line.starts_with("Video,") => {
-                self.extract_quoted_path(line)
-                    .map(|file_path| context.backgrounds.insert(parent.join(file_path)));
-                None
-            }
-            _ => None,
-        })
-    }
-
-    fn parse_storyboard_file(&self, path: &Path, context: &mut ScanContext) -> Result<()> {
-        self.parse_file(path, context, |line, parent, context| {
+            let line = line.trim();
             if line.starts_with("Sprite,") {
                 self.extract_quoted_path(line).map(|sprite_path| {
                     context.storyboard_elements.insert(parent.join(sprite_path))
                 });
             }
-            None
-        })
+        }
+
+        Ok(())
     }
 
     fn extract_quoted_path<'a>(&self, line: &'a str) -> Option<&'a str> {
