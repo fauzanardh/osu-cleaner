@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::Read;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
@@ -134,8 +134,9 @@ impl FileProcessor {
     where
         F: Fn(&str, &Path, &mut ScanContext) -> Option<()>,
     {
-        let file = File::open(path)?;
-        let reader = BufReader::with_capacity(128 * 1024, file); // 128 KB buffer
+        let mut file = File::open(path)?;
+        let mut content = String::new();
+        file.read_to_string(&mut content)?;
         let parent = path.parent().ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -143,10 +144,8 @@ impl FileProcessor {
             )
         })?;
 
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                parser(&line, parent, context);
-            }
+        for line in content.lines() {
+            parser(&line, parent, context);
         }
         Ok(())
     }
