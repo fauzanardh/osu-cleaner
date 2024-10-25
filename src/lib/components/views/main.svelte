@@ -70,9 +70,9 @@
 				analyzerContext.setStatus('filtering');
 				analyzerContext.updateUI('Filtering Files...', '');
 				break;
-			case statusValues.SCAN_CANCELLED ||
-				statusValues.PARSE_CANCELLED ||
-				statusValues.FILTER_CANCELLED:
+			case statusValues.SCAN_CANCELLED:
+			case statusValues.PARSE_CANCELLED:
+			case statusValues.FILTER_CANCELLED:
 				alertContext.show({
 					type: 'warning',
 					title: 'Cancelled',
