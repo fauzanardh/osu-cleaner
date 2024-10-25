@@ -12,6 +12,7 @@ use rayon::prelude::*;
 use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
 
+use crate::check_token;
 use crate::core::cancel::CancellationToken;
 use crate::core::consts::{deletion, file_processor, status_values};
 use crate::core::counters::{CommonCounterState, FilterCounterState};
@@ -194,11 +195,12 @@ impl FileProcessor {
         path: &Path,
         token: CancellationToken,
     ) -> Result<()> {
-        if token.is_cancelled() {
-            app.emit(file_processor::STATUS, status_values::SCAN_CANCELLED)
-                .unwrap();
-            return Ok(());
-        }
+        check_token!(
+            file_processor::STATUS,
+            status_values::SCAN_CANCELLED,
+            token,
+            app
+        );
 
         println!("Scanning requested for {:?}", path);
 
@@ -223,11 +225,12 @@ impl FileProcessor {
             })
             .collect();
         self.try_emit_scan_counts(app, true); // Flush remaining counts
-        if token.is_cancelled() {
-            app.emit(file_processor::STATUS, status_values::SCAN_CANCELLED)
-                .unwrap();
-            return Ok(());
-        }
+        check_token!(
+            file_processor::STATUS,
+            status_values::SCAN_CANCELLED,
+            token,
+            app
+        );
 
         app.emit(file_processor::STATUS, status_values::PARSE_START)
             .unwrap();
@@ -269,11 +272,12 @@ impl FileProcessor {
                 },
             );
         self.try_emit_parse_counts(app, true); // Flush remaining counts
-        if token.is_cancelled() {
-            app.emit(file_processor::STATUS, status_values::PARSE_CANCELLED)
-                .unwrap();
-            return Ok(());
-        }
+        check_token!(
+            file_processor::STATUS,
+            status_values::PARSE_CANCELLED,
+            token,
+            app
+        );
 
         app.emit(file_processor::STATUS, status_values::FILTER_START)
             .unwrap();
@@ -320,11 +324,12 @@ impl FileProcessor {
                 a
             });
         self.try_emit_filter_counts(app, true); // Flush remaining counts
-        if token.is_cancelled() {
-            app.emit(file_processor::STATUS, status_values::FILTER_CANCELLED)
-                .unwrap();
-            return Ok(());
-        }
+        check_token!(
+            file_processor::STATUS,
+            status_values::FILTER_CANCELLED,
+            token,
+            app
+        );
 
         *self.scan_result.write().unwrap() = Some(scan_result);
         Ok(())
@@ -432,11 +437,12 @@ impl FileProcessor {
         categories: Vec<&str>,
         token: CancellationToken,
     ) -> Result<()> {
-        if token.is_cancelled() {
-            app.emit(file_processor::STATUS, status_values::DELETION_CANCELLED)
-                .unwrap();
-            return Ok(());
-        }
+        check_token!(
+            file_processor::STATUS,
+            status_values::DELETION_CANCELLED,
+            token,
+            app
+        );
 
         let scan_result = self.get_scan_result();
         let mut scan_result = scan_result.write().unwrap();
@@ -447,11 +453,12 @@ impl FileProcessor {
         };
 
         for category in categories {
-            if token.is_cancelled() {
-                app.emit(file_processor::STATUS, status_values::DELETION_CANCELLED)
-                    .unwrap();
-                return Ok(());
-            }
+            check_token!(
+                file_processor::STATUS,
+                status_values::DELETION_CANCELLED,
+                token,
+                app
+            );
 
             let file_type = match category {
                 "background_video" => FileType::BackgroundVideo,
@@ -480,10 +487,12 @@ impl FileProcessor {
             }
             app.emit(deletion::CATEGORY_COMPLETE, category).unwrap();
         }
-        if token.is_cancelled() {
-            app.emit(file_processor::STATUS, status_values::DELETION_CANCELLED)
-                .unwrap();
-        }
+        check_token!(
+            file_processor::STATUS,
+            status_values::DELETION_CANCELLED,
+            token,
+            app
+        );
 
         Ok(())
     }
